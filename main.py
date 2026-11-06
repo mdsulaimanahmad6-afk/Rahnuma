@@ -10,6 +10,7 @@ from aiohttp import web
 # --- Environment Variables ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = "@Rahnuma_e_Deen"
+# Default URL set kar diya hai taaki agar Render par bhool jayein toh bhi kaam kare
 MINI_APP_URL = os.getenv("MINI_APP_URL", "https://rahnuma-rr6r.onrender.com/frontend/index.html")
 MONGO_URI = os.getenv("MONGO_URI")
 
@@ -87,22 +88,21 @@ async def handle_web_app_data(message: types.Message):
 # --- Web Server & Webhook Setup (Render ke liye) ---
 
 async def main():
-    # 1. Render ka URL lein
     render_url = os.getenv('RENDER_EXTERNAL_URL')
     
     if render_url:
-        # 2. Purana Webhook delete karein (conflict hatane ke liye)
+        # 1. Purana Webhook delete karein
         await bot.delete_webhook(drop_pending_updates=True)
         
-        # 3. Naya Webhook set karein
+        # 2. Naya Webhook set karein
         webhook_path = f"/webhook/{BOT_TOKEN}"
         await bot.set_webhook(f"{render_url}{webhook_path}")
         print(f"Webhook set to {render_url}{webhook_path}")
         
-        # 4. Aiohttp Web Server banayein
+        # 3. Aiohttp Web Server banayein
         app = web.Application()
         
-        # Health Check (Render isse check karta hai ki server zinda hai)
+        # Health Check (Render isse check karta hai)
         async def health_check(request):
             return web.Response(text="Bot is alive!")
         app.router.add_get("/", health_check)
@@ -114,17 +114,20 @@ async def main():
             return web.Response(text="OK")
         app.router.add_post(webhook_path, webhook_handler)
         
-        # 5. Server ko Port 8080 par start karein
+        # ✅ 404 Error Fix: Frontend folder ko serve karein
+        # Isse aapka Mini App /frontend/index.html par load ho jayega
+        app.router.add_static('/frontend', path='frontend', name='frontend')
+        
+        # 4. Server start karein
         runner = web.AppRunner(app)
         await runner.setup()
         site = web.TCPSite(runner, "0.0.0.0", 8080)
         await site.start()
-        print("Server started on port 8080")
+        print("Server started on port 8080. Frontend is served at /frontend/")
         
-        # 6. Server ko hamesha chalne rakhein
+        # 5. Server ko chalta rakhein
         await asyncio.Event().wait()
     else:
-        # Local testing ke liye polling mode
         print("Running in polling mode (Local)")
         await dp.start_polling(bot)
 
