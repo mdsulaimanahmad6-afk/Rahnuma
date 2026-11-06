@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verification</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 50px 20px; background: #17212b; color: white; }
+        .btn { background: #2ea6ff; color: white; border: none; padding: 15px 30px; border-radius: 10px; font-size: 18px; margin-top: 20px; width: 100%; }
+    </style>
+</head>
+<body>
+    <h2 id="user-name">Loading...</h2>
+    <p>ID: <span id="user-id"></span></p>
+    <button class="btn" onclick="verifyUser()">✅ Verify Now</button>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        const user = tg.initDataUnsafe?.user;
+        if (user) {
+            document.getElementById('user-name').innerText = user.first_name;
+            document.getElementById('user-id').innerText = user.id;
+        }
+        function verifyUser() {
+            tg.sendData(JSON.stringify({ action: "verify", user_id: user.id }));
+            tg.close();
+        }
+    </script>
+</body>
+</html>
