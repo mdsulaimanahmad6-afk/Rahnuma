@@ -6,32 +6,99 @@
     <title>Verification</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 50px 20px; background: #17212b; color: white; }
-        .btn { background: #2ea6ff; color: white; border: none; padding: 15px 30px; border-radius: 10px; font-size: 18px; margin-top: 20px; width: 100%; cursor: pointer; }
-        .btn:active { background: #1c8cdb; }
+        body { font-family: sans-serif; text-align: center; padding: 30px 20px; background: #17212b; color: white; margin: 0; }
+        
+        .card { background: #1c2632; border-radius: 15px; padding: 20px; margin-top: 20px; border: 1px solid #2a3745;}
+        .profile { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+        .user-info { display: flex; align-items: center; gap: 15px; }
+        .avatar { width: 50px; height: 50px; border-radius: 50%; background: #ffb199; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 20px; color: #333; }
+        .user-details h3 { margin: 0; font-size: 18px; }
+        .user-details p { margin: 5px 0 0 0; font-size: 14px; color: #8899a6; }
+        
+        .btn { background: #2ea6ff; color: white; border: none; padding: 15px; border-radius: 10px; font-size: 18px; width: 100%; cursor: pointer; margin-top: 20px; font-weight: bold;}
+        .btn-return { background: linear-gradient(90deg, #e91e63, #ff9800); }
+
+        /* Error Screen CSS */
+        .error-screen { display: none; text-align: center; padding-top: 50px; }
+        .badge-blocked { border: 1px solid #d39e00; color: #d39e00; background: rgba(211, 158, 0, 0.1); padding: 5px 15px; border-radius: 20px; font-size: 12px; font-weight: bold; margin-bottom: 20px; display: inline-block; }
+        .icon-circle { width: 80px; height: 80px; background: #2a3745; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px auto; font-size: 40px; color: #ffc107; }
+        .error-title { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
+        .error-desc { font-size: 15px; color: #8899a6; margin-bottom: 30px; padding: 0 20px; }
+        
+        /* Success Screen CSS */
+        .success-screen { display: none; padding-top: 50px; }
+        .terminal { background: #212d3a; border-radius: 10px; text-align: left; padding: 15px; font-family: monospace; font-size: 14px; color: #4caf50; margin-top: 20px; }
+        .terminal-top { display: flex; gap: 5px; margin-bottom: 10px; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; }
     </style>
 </head>
 <body>
-    <h2 id="user-name">Loading...</h2>
-    <p>ID: <span id="user-id"></span></p>
-    <button class="btn" onclick="verifyUser()">✅ Verify Now</button>
+
+    <!-- Main View -->
+    <div id="main-view">
+        <div class="card">
+            <div class="profile">
+                <div class="user-info">
+                    <div class="avatar" id="avatar">?</div>
+                    <div class="user-details">
+                        <h3 id="user-name">Loading...</h3>
+                        <p>ID: <span id="user-id"></span></p>
+                    </div>
+                </div>
+                <div style="background: #2a3745; padding: 5px 10px; border-radius: 20px; font-size: 12px;">✨ Theme</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <button class="btn" id="verify-btn" onclick="verifyUser()">✅ Verify Now</button>
+        </div>
+    </div>
+
+    <!-- Blocked Screen -->
+    <div class="error-screen" id="error-view">
+        <div class="badge-blocked">● BLOCKED</div>
+        <div class="icon-circle">👥</div>
+        <div class="error-title">Multiple Accounts</div>
+        <div class="error-desc">This device is already linked to another user.</div>
+        <button class="btn" style="background: transparent; border: 1px solid #2a3745; color: #8899a6;">Awaiting Verification</button>
+    </div>
+
+    <!-- Success Screen -->
+    <div class="success-screen" id="success-view">
+        <h2 id="success-name">Ainee 🖤</h2>
+        <p>UID: <span id="success-id"></span></p>
+        <div class="terminal">
+            <div class="terminal-top">
+                <div class="dot" style="background: #ff5f56;"></div>
+                <div class="dot" style="background: #ffbd2e;"></div>
+                <div class="dot" style="background: #27c93f;"></div>
+            </div>
+            <div>[✔] Captcha bypassed.</div>
+            <div>[✔] Network safe.</div>
+            <div>[✔] Profile ID secured.</div>
+            <div style="color: #8bc34a;">> SECURE: Account & Profile Verified.</div>
+        </div>
+        <button class="btn btn-return" onclick="tg.close()">➔ RETURN TO BOT</button>
+    </div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
         const user = tg.initDataUnsafe?.user;
+
         if (user) {
             document.getElementById('user-name').innerText = user.first_name;
             document.getElementById('user-id').innerText = user.id;
+            document.getElementById('avatar').innerText = user.first_name.charAt(0).toUpperCase();
+            
+            document.getElementById('success-name').innerText = user.first_name;
+            document.getElementById('success-id').innerText = user.id;
         }
 
         function verifyUser() {
-            if (!user) {
-                alert("User data not found!");
-                return;
-            }
+            document.getElementById('verify-btn').innerText = "Verifying...";
+            document.getElementById('verify-btn').disabled = true;
 
-            // Device info collect karein
             const deviceInfo = {
                 userAgent: navigator.userAgent,
                 platform: navigator.platform,
@@ -40,13 +107,18 @@
                 timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
             };
 
-            // Data Telegram ko bhej kar close karna
+            // Backend ko data bhejein
             tg.sendData(JSON.stringify({ 
                 action: "verify", 
                 user_id: user.id,
                 device_info: deviceInfo 
             }));
-            tg.close();
+            
+            // Thodi der mein success screen dikhayein (Backend check hone tak)
+            setTimeout(() => {
+                document.getElementById('main-view').style.display = 'none';
+                document.getElementById('success-view').style.display = 'block';
+            }, 1500);
         }
     </script>
 </body>
