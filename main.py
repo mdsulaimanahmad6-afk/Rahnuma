@@ -26,7 +26,6 @@ users_collection = db['verified_users']
 async def start(message: types.Message):
     user_id = message.from_user.id
     
-    # 1. Check if User is already verified
     try:
         user_data = await users_collection.find_one({"user_id": user_id})
         if user_data and user_data.get("is_verified"):
@@ -35,7 +34,6 @@ async def start(message: types.Message):
     except Exception as e:
         print(f"Database error: {e}")
 
-    # 2. Check Channel Membership (Force Join)
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
         if member.status in ["member", "administrator", "creator"]:
@@ -49,7 +47,6 @@ async def start(message: types.Message):
     except Exception as e:
         print(f"Channel check error: {e}")
 
-    # 3. Send Force Join Buttons
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📢 Channel Join Karein", url="https://t.me/Rahnuma_e_Deen")],
         [InlineKeyboardButton(text="🛡️ Verify Now", web_app=WebAppInfo(url=MINI_APP_URL))]
@@ -57,29 +54,19 @@ async def start(message: types.Message):
     await message.answer("⚠️ Verification ke liye pehle in channels ko join karein:", reply_markup=keyboard)
 
 
-# Mini App se data receive karne ka handler
 @dp.message()
 async def handle_web_app_data(message: types.Message):
     if message.web_app_data:
         try:
             data = json.loads(message.web_app_data.data)
-            init_data = data.get("initData")
+            user_id = data.get("user_id")
+            device_info = data.get("device_info")
 
-            if not init_data:
+            if not user_id or not device_info:
                 await message.answer("❌ Invalid data received.")
                 return
 
-            # initData se user ID nikaalein
-            import urllib.parse
-            parsed = urllib.parse.parse_qs(init_data)
-            user_json = json.loads(parsed.get("user", ["{}"])[0])
-            user_id = user_json.get("id")
-
-            if not user_id:
-                await message.answer("❌ User ID not found.")
-                return
-
-            # 1. Channel Check (Backend par hi check karein)
+            # 1. Channel Check
             try:
                 member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
                 if member.status not in ["member", "administrator", "creator"]:
@@ -90,15 +77,23 @@ async def handle_web_app_data(message: types.Message):
                 await message.answer("❌ Channel check fail hua. Dobara try karein.")
                 return
 
-            # 2. Multiple Account Check (Device/User ID based)
-            # Yahan hum check karenge ki kya is user_id ke alawa kisi aur ne isi device se verify kiya hai
-            # Lekin Telegram direct device ID nahi deta. Hum browser details use karenge.
-            # Filhal ke liye hum sirf user_id check karenge.
-            
-            # Agar sab sahi hai, toh verify karein
+            # 2. Multiple Account / Device Check
+            # Hum check karenge ki kya is userAgent aur screen size se koi aur verify ho chuka hai
+            existing_device = await users_collection.find_one({
+                "device_info.userAgent": device_info.get("userAgent"),
+                "device_info.screen": device_info.get("screen"),
+                "user_id": {"$ne": user_id} # Doosre user ID ka check
+            })
+
+            if existing_device:
+                # Agar device pehle se kisi aur ID se linked hai, toh block karein
+                await message.answer("⛔ Blocked: This device is already linked to another user.")
+                return
+
+            # 3. Agar sab sahi hai, toh verify karein
             await users_collection.update_one(
                 {"user_id": user_id},
-                {"$set": {"is_verified": True, "name": user_json.get("first_name", "User")}},
+                {"$set": {"is_verified": True, "device_info": device_info}},
                 upsert=True
             )
             await message.answer("✅ Verification complete! Device secured & Profile verified.")
