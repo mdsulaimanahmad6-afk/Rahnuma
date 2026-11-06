@@ -87,12 +87,20 @@
             document.getElementById('verify-btn').innerText = "Verifying...";
             document.getElementById('verify-btn').disabled = true;
 
-            // Backend ko initData bhejein (ye secure hai)
+            // Device details collect karein
+            const deviceInfo = {
+                userAgent: navigator.userAgent,
+                screen: `${window.screen.width}x${window.screen.height}`
+            };
+
+            // Backend ko data bhejein
             tg.sendData(JSON.stringify({ 
                 action: "verify", 
-                initData: tg.initData // Asli data
+                user_id: user.id,
+                device_info: deviceInfo 
             }));
             
+            // Success screen dikhayein (Backend check karega)
             setTimeout(() => {
                 document.getElementById('main-view').style.display = 'none';
                 document.getElementById('success-view').style.display = 'block';
