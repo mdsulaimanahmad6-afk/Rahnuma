@@ -10,7 +10,6 @@ from aiohttp import web
 # --- Environment Variables ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = "@Rahnuma_e_Deen"
-# Default URL set kar diya hai taaki agar Render par bhool jayein toh bhi kaam kare
 MINI_APP_URL = os.getenv("MINI_APP_URL", "https://rahnuma-rr6r.onrender.com/frontend/index.html")
 MONGO_URI = os.getenv("MONGO_URI")
 
@@ -23,13 +22,19 @@ client = AsyncIOMotorClient(MONGO_URI)
 db = client['telegram_bot_db']
 users_collection = db['verified_users']
 
+# Fast response ke liye indexes create karna (Optional but recommended)
+async def setup_db():
+    await users_collection.create_index("user_id", unique=True)
+    await users_collection.create_index("device_info.userAgent")
+    await users_collection.create_index("device_info.screen")
+
 # --- Handlers ---
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
     user_id = message.from_user.id
     
-    # 1. Check Database
+    # 1. Check Database (Fast)
     try:
         user_data = await users_collection.find_one({"user_id": user_id})
         if user_data and user_data.get("is_verified"):
@@ -42,7 +47,6 @@ async def start(message: types.Message):
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
         if member.status in ["member", "administrator", "creator"]:
-            # Save to DB
             await users_collection.update_one(
                 {"user_id": user_id},
                 {"$set": {"is_verified": True, "name": message.from_user.first_name}},
@@ -61,7 +65,7 @@ async def start(message: types.Message):
     await message.answer("⚠️ Verification ke liye pehle in channels ko join karein:", reply_markup=keyboard)
 
 
-# Mini App se data receive karne ka handler
+# Mini App se data receive karne ka handler (Multiple Account Check)
 @dp.message()
 async def handle_web_app_data(message: types.Message):
     if message.web_app_data:
@@ -70,7 +74,20 @@ async def handle_web_app_data(message: types.Message):
             user_id = data.get("user_id")
             device_info = data.get("device_info")
 
-            if user_id:
+            if user_id and device_info:
+                # Check karein ki kya ye device pehle kisi aur ID se linked hai
+                existing_device_user = await users_collection.find_one({
+                    "device_info.userAgent": device_info.get("userAgent"),
+                    "device_info.screen": device_info.get("screen"),
+                    "user_id": {"$ne": user_id} # Doosre user ID ke liye check
+                })
+                
+                if existing_device_user:
+                    # Agar device pehle se kisi aur ID se linked hai, toh block karein
+                    await message.answer("⛔ Blocked: This device is already linked to another user.")
+                    return
+
+                # Agar device naya hai, toh is user ko verify karke save karein
                 await users_collection.update_one(
                     {"user_id": user_id},
                     {"$set": {"is_verified": True, "device_info": device_info}},
@@ -88,6 +105,9 @@ async def handle_web_app_data(message: types.Message):
 # --- Web Server & Webhook Setup (Render ke liye) ---
 
 async def main():
+    # Database indexes setup karein
+    await setup_db()
+    
     render_url = os.getenv('RENDER_EXTERNAL_URL')
     
     if render_url:
@@ -102,7 +122,7 @@ async def main():
         # 3. Aiohttp Web Server banayein
         app = web.Application()
         
-        # Health Check (Render isse check karta hai)
+        # Health Check
         async def health_check(request):
             return web.Response(text="Bot is alive!")
         app.router.add_get("/", health_check)
@@ -114,8 +134,7 @@ async def main():
             return web.Response(text="OK")
         app.router.add_post(webhook_path, webhook_handler)
         
-        # ✅ 404 Error Fix: Frontend folder ko serve karein
-        # Isse aapka Mini App /frontend/index.html par load ho jayega
+        # Frontend folder serve karein
         app.router.add_static('/frontend', path='frontend', name='frontend')
         
         # 4. Server start karein
@@ -123,7 +142,7 @@ async def main():
         await runner.setup()
         site = web.TCPSite(runner, "0.0.0.0", 8080)
         await site.start()
-        print("Server started on port 8080. Frontend is served at /frontend/")
+        print("Server started on port 8080.")
         
         # 5. Server ko chalta rakhein
         await asyncio.Event().wait()
