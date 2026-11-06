@@ -22,19 +22,11 @@ client = AsyncIOMotorClient(MONGO_URI)
 db = client['telegram_bot_db']
 users_collection = db['verified_users']
 
-# Fast response ke liye indexes create karna (Optional but recommended)
-async def setup_db():
-    await users_collection.create_index("user_id", unique=True)
-    await users_collection.create_index("device_info.userAgent")
-    await users_collection.create_index("device_info.screen")
-
-# --- Handlers ---
-
 @dp.message(Command("start"))
 async def start(message: types.Message):
     user_id = message.from_user.id
     
-    # 1. Check Database (Fast)
+    # 1. Check if User is already verified
     try:
         user_data = await users_collection.find_one({"user_id": user_id})
         if user_data and user_data.get("is_verified"):
@@ -65,7 +57,7 @@ async def start(message: types.Message):
     await message.answer("⚠️ Verification ke liye pehle in channels ko join karein:", reply_markup=keyboard)
 
 
-# Mini App se data receive karne ka handler (Multiple Account Check)
+# Mini App se data receive karne ka handler
 @dp.message()
 async def handle_web_app_data(message: types.Message):
     if message.web_app_data:
@@ -75,19 +67,19 @@ async def handle_web_app_data(message: types.Message):
             device_info = data.get("device_info")
 
             if user_id and device_info:
-                # Check karein ki kya ye device pehle kisi aur ID se linked hai
+                # 1. Check karein ki kya is device se koi aur account pehle verify ho chuka hai
                 existing_device_user = await users_collection.find_one({
                     "device_info.userAgent": device_info.get("userAgent"),
                     "device_info.screen": device_info.get("screen"),
-                    "user_id": {"$ne": user_id} # Doosre user ID ke liye check
+                    "user_id": {"$ne": user_id} # Doosre ID ka check
                 })
                 
                 if existing_device_user:
-                    # Agar device pehle se kisi aur ID se linked hai, toh block karein
+                    # Agar device pehle se linked hai, toh Block message bhejein
                     await message.answer("⛔ Blocked: This device is already linked to another user.")
                     return
 
-                # Agar device naya hai, toh is user ko verify karke save karein
+                # 2. Agar device naya hai, toh save karein aur Success bhejein
                 await users_collection.update_one(
                     {"user_id": user_id},
                     {"$set": {"is_verified": True, "device_info": device_info}},
@@ -102,49 +94,38 @@ async def handle_web_app_data(message: types.Message):
             await message.answer("❌ Kuch error aaya. Dobara try karein.")
 
 
-# --- Web Server & Webhook Setup (Render ke liye) ---
+# --- Web Server & Webhook Setup ---
 
 async def main():
-    # Database indexes setup karein
-    await setup_db()
-    
     render_url = os.getenv('RENDER_EXTERNAL_URL')
     
     if render_url:
-        # 1. Purana Webhook delete karein
         await bot.delete_webhook(drop_pending_updates=True)
-        
-        # 2. Naya Webhook set karein
         webhook_path = f"/webhook/{BOT_TOKEN}"
         await bot.set_webhook(f"{render_url}{webhook_path}")
         print(f"Webhook set to {render_url}{webhook_path}")
         
-        # 3. Aiohttp Web Server banayein
         app = web.Application()
         
-        # Health Check
         async def health_check(request):
             return web.Response(text="Bot is alive!")
         app.router.add_get("/", health_check)
         
-        # Telegram Webhook Handler
         async def webhook_handler(request):
             update = types.Update(**(await request.json()))
             await dp.feed_update(bot, update)
             return web.Response(text="OK")
         app.router.add_post(webhook_path, webhook_handler)
         
-        # Frontend folder serve karein
+        # Frontend files serve karein
         app.router.add_static('/frontend', path='frontend', name='frontend')
         
-        # 4. Server start karein
         runner = web.AppRunner(app)
         await runner.setup()
         site = web.TCPSite(runner, "0.0.0.0", 8080)
         await site.start()
         print("Server started on port 8080.")
         
-        # 5. Server ko chalta rakhein
         await asyncio.Event().wait()
     else:
         print("Running in polling mode (Local)")
