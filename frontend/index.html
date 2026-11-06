@@ -4,30 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Verification</title>
-    <!-- Telegram Web App SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { 
-            font-family: sans-serif; 
-            text-align: center; 
-            padding: 50px 20px; 
-            background: #17212b; 
-            color: white; 
-        }
-        .btn { 
-            background: #2ea6ff; 
-            color: white; 
-            border: none; 
-            padding: 15px 30px; 
-            border-radius: 10px; 
-            font-size: 18px; 
-            margin-top: 20px; 
-            width: 100%; 
-            cursor: pointer;
-        }
-        .btn:active {
-            background: #1c8cdb;
-        }
+        body { font-family: sans-serif; text-align: center; padding: 50px 20px; background: #17212b; color: white; }
+        .btn { background: #2ea6ff; color: white; border: none; padding: 15px 30px; border-radius: 10px; font-size: 18px; margin-top: 20px; width: 100%; cursor: pointer; }
+        .btn:active { background: #1c8cdb; }
     </style>
 </head>
 <body>
@@ -36,32 +17,30 @@
     <button class="btn" onclick="verifyUser()">✅ Verify Now</button>
 
     <script>
-        // Telegram Web App ko initialize karein
         const tg = window.Telegram.WebApp;
-        tg.expand(); // App ko full screen karein
-
-        // User ki details screen par dikhayein
+        tg.expand();
         const user = tg.initDataUnsafe?.user;
         if (user) {
             document.getElementById('user-name').innerText = user.first_name;
             document.getElementById('user-id').innerText = user.id;
         }
 
-        // Verify Button dabane par ye function chalega
         function verifyUser() {
             if (!user) {
                 alert("User data not found!");
                 return;
             }
 
-            // Device/Browser ki basic info collect karein
+            // Device info collect karein
             const deviceInfo = {
                 userAgent: navigator.userAgent,
                 platform: navigator.platform,
-                screen: `${window.screen.width}x${window.screen.height}`
+                screen: `${window.screen.width}x${window.screen.height}`,
+                language: navigator.language,
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
             };
 
-            // Data Telegram Bot ko bhej kar app close karna
+            // Data Telegram ko bhej kar close karna
             tg.sendData(JSON.stringify({ 
                 action: "verify", 
                 user_id: user.id,
