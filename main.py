@@ -1,6 +1,7 @@
 import os
 import json
 import asyncio
+import urllib.parse
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from aiogram.filters import Command
@@ -59,14 +60,22 @@ async def handle_web_app_data(message: types.Message):
     if message.web_app_data:
         try:
             data = json.loads(message.web_app_data.data)
-            user_id = data.get("user_id")
-            device_info = data.get("device_info")
+            init_data = data.get("initData")
 
-            if not user_id or not device_info:
+            if not init_data:
                 await message.answer("❌ Invalid data received.")
                 return
 
-            # 1. Channel Check
+            # initData se user ID nikaalein
+            parsed = urllib.parse.parse_qs(init_data)
+            user_json = json.loads(parsed.get("user", ["{}"])[0])
+            user_id = user_json.get("id")
+
+            if not user_id:
+                await message.answer("❌ User ID not found.")
+                return
+
+            # 1. Channel Check (Backend par hi check karein)
             try:
                 member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
                 if member.status not in ["member", "administrator", "creator"]:
@@ -77,23 +86,17 @@ async def handle_web_app_data(message: types.Message):
                 await message.answer("❌ Channel check fail hua. Dobara try karein.")
                 return
 
-            # 2. Multiple Account / Device Check
-            # Hum check karenge ki kya is userAgent aur screen size se koi aur verify ho chuka hai
-            existing_device = await users_collection.find_one({
-                "device_info.userAgent": device_info.get("userAgent"),
-                "device_info.screen": device_info.get("screen"),
-                "user_id": {"$ne": user_id} # Doosre user ID ka check
-            })
-
-            if existing_device:
-                # Agar device pehle se kisi aur ID se linked hai, toh block karein
-                await message.answer("⛔ Blocked: This device is already linked to another user.")
+            # 2. Multiple Account Check (User ID based)
+            # Yahan hum check karenge ki kya is user_id ke alawa kisi aur ne verify kiya hai
+            existing_user = await users_collection.find_one({"user_id": user_id})
+            if existing_user and existing_user.get("is_verified"):
+                await message.answer("⛔ Aap already verified hain.")
                 return
 
             # 3. Agar sab sahi hai, toh verify karein
             await users_collection.update_one(
                 {"user_id": user_id},
-                {"$set": {"is_verified": True, "device_info": device_info}},
+                {"$set": {"is_verified": True, "name": user_json.get("first_name", "User")}},
                 upsert=True
             )
             await message.answer("✅ Verification complete! Device secured & Profile verified.")
